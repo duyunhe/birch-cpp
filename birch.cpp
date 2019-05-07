@@ -51,7 +51,24 @@ double cluster_dist(CFTree node, Data *data)
 }
 
 
-static CFTree InsertLeaf(CFTree node, Data *pds, int idx)
+CFTree InsertLeafSub(CFTree node, CFTree parent, Data *pds, int idx)
+{
+	if (parent == NULL)
+	{
+		parent = _Malloc_CFNode();
+		parent->leaf = false;
+		// split current leaf into 2 leafs(node & subline), which are the children of new node
+		CFTree subline = _Malloc_CFNode();
+		subline = InsertLeaf(subline, parent, pds, idx);
+		parent = InsertNonLeaf(node, parent);
+		parent = InsertNonLeaf(subline, parent);
+		Update_CFtree_Static(parent);
+		return parent;
+	}
+}
+
+
+CFTree InsertLeaf(CFTree node, CFTree parent, Data *pds, int idx)
 {
 	node->subCluster[node->subLen++] = idx;
 	Insert_CFTree_Static(node, pds + idx);
@@ -59,14 +76,26 @@ static CFTree InsertLeaf(CFTree node, Data *pds, int idx)
 }
 
 
-static CFTree InsertNonLeaf(CFTree node, CFTree parent)
+CFTree InsertNonLeaf(CFTree node, CFTree parent)
 {
 	parent->child[parent->childLen++] = node;
 	return parent;
 }
 
+void Update_CFtree_Static(CFTree node)
+{
+	node->n = 0;
+	node->ls->x = node->ls->y = node->ss = 0;
+	for (int i = 0; i < node->childLen; ++i)
+	{
+		node->n += node->child[i]->n;
+		node->ls->x += node->child[i]->ls->x;
+		node->ls->y += node->child[i]->ls->y;
+		node->ss += node->child[i]->ss;
+	}
+}
 
-static void Insert_CFTree_Static(CFTree node, Data* data)
+void Insert_CFTree_Static(CFTree node, Data* data)
 {
 	node->n++;
 	node->ls->x += data->x, node->ls->y += data->y;
@@ -74,29 +103,15 @@ static void Insert_CFTree_Static(CFTree node, Data* data)
 }
 
 
-static void Remove_CFTree_Static(CFTree node, Data* data)
-{
-	node->n--;
-	node->ls->x -= data->x, node->ls->y -= data->y;
-	node->ss -= data->x * data->x + data->y * data->y;
-}
-
-
-static CFTree Split_CFTree(CFTree node, CFTree parent, Data *pds)
+CFTree Split_CFTree(CFTree node, CFTree parent, Data *pds)
 {
 	if (parent == NULL)
 	{
-		parent = _Malloc_CFNode();
-		parent->leaf = false;
+		
 		// move last element to new leaf
 		node->subLen = L;
-		Remove_CFTree_Static(node, pds + node->subCluster[L]);
-		// split current leaf into 2 leafs(node & subline), which are the children of new node
-		CFTree subline = _Malloc_CFNode();
-		subline = InsertLeaf(subline, pds, node->subCluster[L]);
-		parent = InsertNonLeaf(node, parent);
-		parent = InsertNonLeaf(subline, parent);
-		return parent;
+		
+		
 	}
 	else
 	{
@@ -106,12 +121,16 @@ static CFTree Split_CFTree(CFTree node, CFTree parent, Data *pds)
 }
 
 
-static CFTree _Insert_CFTree(CFTree node, Data* pds, int idx, CFTree parent)
+CFTree _Insert_CFTree(CFTree node, CFTree parent, Data* pds, int idx)
 {
 	if (node->leaf)		// recurse finally stop here
 	{
-		node = InsertLeaf(node, pds, idx);
-		
+		if (node->subLen == L)		// exceed max sub-cluster number
+			node = InsertLeafSub(node, parent, pds, idx);
+		else
+		{
+			node = InsertLeaf(node, parent, pds, idx);
+		}	
 	}
 	else    //	non leaf
 	{
@@ -128,26 +147,15 @@ static CFTree _Insert_CFTree(CFTree node, Data* pds, int idx, CFTree parent)
 				sel_idx = i;
 			}
 		}
-		node->child[sel_idx] = _Insert_CFTree(node->child[sel_idx], pds, idx, node);
+		node->child[sel_idx] = _Insert_CFTree(node->child[sel_idx], node, pds, idx);
 	}
 	int Limit = L;
-	if (node->subLen > Limit)		// split
-	{
-		if (parent == NULL)			// root
-		{
-			node = Split_CFTree(node, parent, pds);
-		}
-		else
-		{
-
-		}
-	}
 	return node;
 }
 
 
 CFTree InsertCFTree(CFTree t, Data* pds, int idx)
 {
-	t = _Insert_CFTree(t, pds, idx, NULL);
+	t = _Insert_CFTree(t, NULL, pds, idx);
 	return t;
 }

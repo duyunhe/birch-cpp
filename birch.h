@@ -1,7 +1,7 @@
 #pragma once
-#pragma pack(4)
 #include <cstdlib>
 #include <cstdio>
+#pragma pack(4)
 
 // Cluster Feature Tree
 
@@ -21,7 +21,7 @@ struct CFNode
 {
 	int n;				// number of elements in all tree which root is this node   S0
 	double ss;			// S2
-	int subCluster[L + 1];			// sub cluster
+	int subCluster[L];			// sub cluster
 	CFNode *child[B + 1];
 	CFNode *next, *prev;
 	Data *ls;			// center point		S1
@@ -34,3 +34,9 @@ struct CFNode
 CFTree InitCFTree();
 CFTree DestroyCFTree(CFTree t);
 CFTree InsertCFTree(CFTree, Data*, int);
+
+
+void Insert_CFTree_Static(CFTree node, Data* data);
+void Update_CFtree_Static(CFTree node);
+CFTree InsertLeaf(CFTree node, CFTree parent, Data *pds, int idx); 
+CFTree InsertNonLeaf(CFTree node, CFTree parent);
