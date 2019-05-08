@@ -1,4 +1,5 @@
 #pragma once
+
 #include <cstdlib>
 #include <cstdio>
 #pragma pack(4)
@@ -38,5 +39,5 @@ CFTree InsertCFTree(CFTree, Data*, int);
 
 void Insert_CFTree_Static(CFTree node, Data* data);
 void Update_CFtree_Static(CFTree node);
-CFTree InsertLeaf(CFTree node, CFTree parent, Data *pds, int idx); 
+CFTree InsertLeaf(CFTree node, Data *pds, int idx); 
 CFTree InsertNonLeaf(CFTree node, CFTree parent);
