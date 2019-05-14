@@ -1,5 +1,8 @@
 #include "birch.h"
 #include <cmath>
+#include <string.h>
+
+static int node_id = 0;
 
 void add_static(CFTree src, CFTree y)
 {
@@ -19,6 +22,7 @@ static CFTree _Malloc_CFNode()
 	{
 		newNode->child[i] = NULL;
 	}
+	newNode->nid = node_id++;
 	newNode->ls = (Data*)malloc(sizeof(Data));
 	newNode->n = 0, newNode->ls->x = 0, newNode->ls->y = 0, newNode->ss = 0;
 	newNode->leaf = true;
@@ -56,6 +60,21 @@ double cluster_dist(CFTree node, Data *data)
 }
 
 
+double cluster_radius_inserted(CFTree node, Data *data)
+{
+	if (!node->leaf)
+	{
+		printf("not leaf\n");
+		return 0;
+	}
+	double nss = node->ss + (data->x * data->x + data->y * data->y);
+	Data *nls = (Data*)malloc(sizeof(Data));
+	nls->x = node->ls->x + data->x, nls->y = node->ls->y + data->y;
+	int nn = node->n + 1;
+	return sqrt((nss * nn - (nls->x * nls->x + nls->y * nls->y)) / (nn * nn));
+}
+
+
 double CFDist(CFTree src, CFTree dst)
 {
 	double dx = src->ls->x / src->n - dst->ls->x / dst->n;
@@ -64,9 +83,83 @@ double CFDist(CFTree src, CFTree dst)
 }
 
 
+double DataDist(Data *x, Data *y)
+{
+	double dx = x->x - y->x, dy = x->y - y->y;
+	return sqrt(dx * dx + dy * dy);
+}
+
+
+CFTree InsertLeafSplit(CFTree node, CFTree parent, Data *pds, int idx, int pos)
+{
+	// like split node
+	double maxDist = -1e10;
+	int sel_idx0 = -1;
+	Data ct;
+	ct.x = node->ls->x / node->n, ct.y = node->ls->y / node->n;
+	for (int i = 0; i < L; ++i)
+	{
+		double dist = DataDist(pds + node->subCluster[i], &ct);
+		if (dist > maxDist)
+		{
+			maxDist = dist;
+			sel_idx0 = i;
+		}
+	}
+	maxDist = -1e10;
+	int sel_idx1 = -1;
+	double dist0[L] = {};			// store, for next step
+	for (int i = 0; i < L; ++i)
+	{
+		double dist = DataDist(pds + node->subCluster[i], &ct);
+		if (dist > maxDist)
+		{
+			maxDist = dist;
+			sel_idx1 = i;
+		}
+		dist0[i] = dist;
+	}
+
+	CFTree seed0 = _Malloc_CFNode();			// near to sel0
+	CFTree seed1 = _Malloc_CFNode();
+	for (int i = 0; i < L; ++i)
+	{
+		double dist1 = DataDist(pds + node->subCluster[i], pds + node->subCluster[sel_idx1]);
+		if (dist1 < dist0[i])
+			seed1 = InsertLeaf(seed1, pds, node->subCluster[i]);
+		else
+			seed0 = InsertLeaf(seed0, pds, node->subCluster[i]);
+	}
+	double d0 = DataDist(pds + node->subCluster[sel_idx0], pds + idx);
+	double d1 = DataDist(pds + node->subCluster[sel_idx1], pds + idx);
+	if (d0 > d1)
+		seed1 = InsertLeaf(seed1, pds, idx);
+	else
+		seed0 = InsertLeaf(seed0, pds, idx);
+	
+	if (NULL != parent)
+	{
+		parent->child[pos] = seed0;
+		InsertNonLeaf(seed1, parent);
+		free(node);
+		return seed0;
+	}
+	else
+	{
+		// if parent is root, should return new root 
+		CFTree root = _Malloc_CFNode();
+		InsertNonLeaf(seed0, root);
+		InsertNonLeaf(seed1, root);
+		free(node);
+		Update_CFtree_Static(root);
+		return root;
+	}
+}
+
+
 CFTree InsertLeafSub(CFTree node, CFTree parent, Data *pds, int idx)
 {
-	if (parent == NULL)		// just for root
+	if (parent == NULL)   // root
 	{
 		parent = _Malloc_CFNode();
 		parent->leaf = false;
@@ -82,7 +175,7 @@ CFTree InsertLeafSub(CFTree node, CFTree parent, Data *pds, int idx)
 	{
 		CFTree nd = _Malloc_CFNode();
 		nd = InsertLeaf(nd, pds, idx);
-		node = InsertNonLeaf(nd, node);
+		parent = InsertNonLeaf(nd, parent);
 		Insert_CFTree_Static(node, pds + idx);
 		return node;
 	}
@@ -122,7 +215,7 @@ void Insert_CFTree_Static(CFTree node, Data* data)
 }
 
 
-CFTree Split_CFTree(CFTree node, CFTree parent, Data *pds)
+CFTree Split_CFTree(CFTree node, CFTree parent, Data *pds, int pos)
 {
 	// here, node already has B children, so has to be splited into two-parts
 	double maxDist = -1e10;
@@ -150,6 +243,7 @@ CFTree Split_CFTree(CFTree node, CFTree parent, Data *pds)
 		}
 		dist0[i] = dist;
 	}
+
 	// allocate 
 	CFTree seed0 = _Malloc_CFNode();
 	CFTree seed1 = _Malloc_CFNode();
@@ -163,70 +257,92 @@ CFTree Split_CFTree(CFTree node, CFTree parent, Data *pds)
 	}
 	Update_CFtree_Static(seed0);
 	Update_CFtree_Static(seed1);
-	// clear node, for node now has only 2 children
-	node->childLen = 0;
-	InsertNonLeaf(seed0, node);
-	InsertNonLeaf(seed1, node);
-	for (int i = 2; i <= B; ++i)
-		node->child[i] = NULL;
-	
-	return node;
+	if (NULL != parent)
+	{
+		parent->child[pos] = seed0;
+		InsertNonLeaf(seed1, parent);
+		free(node);
+		return seed0;
+	}
+	else
+	{
+		// if parent is root, should return new root 
+		CFTree root = _Malloc_CFNode();
+		InsertNonLeaf(seed0, root);
+		InsertNonLeaf(seed1, root);
+		free(node);
+		Update_CFtree_Static(root);
+		return root;
+	}
 }
 
 
-CFTree _Insert_CFTree(CFTree node, CFTree parent, Data* pds, int idx)
+CFTree _Insert_CFTree(CFTree node, CFTree parent, Data* pds, int idx, int pos)
 {
 	if (node->leaf)		// recurse finally stop here
 	{
-		if (node->subLen == L)		// just for root
+		if (node->subLen == L)		
 		{
-			node = InsertLeafSub(node, parent, pds, idx);
+			node = InsertLeafSplit(node, parent, pds, idx, pos);
 		}
 		else
 		{
-			node = InsertLeaf(node, pds, idx);
+			double r = cluster_radius_inserted(node, pds + idx);
+			if (r > T)
+				node = InsertLeafSub(node, parent, pds, idx);
+			else
+				node = InsertLeaf(node, pds, idx);
 		}
+		return node;
 	}
 	else    
 	{
 		const int CF_NOT_FOUND = -1;
 		int sel_idx = CF_NOT_FOUND;
 		double min_dist = 1e20;
-		for (int i = 0; i < B; ++i)
+		for (int i = 0; i < node->childLen; ++i)
 		{
-			if (node->child[i] == NULL || node->child[i]->subLen == L)
+			if (node->child[i] == NULL)
 				continue;
-
+			if (node->child[i]->leaf)
+			{
+				double r = cluster_radius_inserted(node->child[i], pds + idx);
+				if (r > T)
+					continue;
+			}
 			double dist = cluster_dist(node->child[i], pds + idx);
 			if (dist < min_dist)
 			{
 				min_dist = dist;
 				sel_idx = i;
-			}
+			}    
 		}
-		if (sel_idx == CF_NOT_FOUND)
+		if (sel_idx == CF_NOT_FOUND)	// add one more child, check if split
 		{
-			node = InsertLeafSub(node, parent, pds, idx);
+			node->child[node->childLen] = _Malloc_CFNode();
+			node->child[node->childLen] = InsertLeaf(node->child[node->childLen], pds, idx);
+			++ node->childLen;
 		}
 		else
 		{
-			node->child[sel_idx] = _Insert_CFTree(node->child[sel_idx], node, pds, idx);
-			Insert_CFTree_Static(node, pds + idx);
-		}	
+			node->child[sel_idx] = _Insert_CFTree(node->child[sel_idx], node, pds, idx, sel_idx);	
+		}
+		Insert_CFTree_Static(node, pds + idx);
+		int Limit = B;
+		// exceed children limit, need split
+		// choose the farthest CFNode from node center as one seed, then choose farthest CFNode from seed as another
+		// then insert 2 seeds into parent
+		if (node->childLen > Limit)
+		{
+			node = Split_CFTree(node, parent, pds, pos);
+		}
+		return node;
 	}
-	int Limit = B;
-	// exceed children limit, need split
-	// choose the farthest CFNode from node center as one seed, then choose farthest CFNode from seed as another
-	if (node->childLen > Limit)		
-	{
-		node = Split_CFTree(node, parent, pds);
-	}
-	return node;
 }
 
 
 CFTree InsertCFTree(CFTree t, Data* pds, int idx)
 {
-	t = _Insert_CFTree(t, NULL, pds, idx);
+	t = _Insert_CFTree(t, NULL, pds, idx, -1);
 	return t;
 }

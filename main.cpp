@@ -26,16 +26,50 @@ void print_pos(Data *pds, int len)
 }
 
 
+void print_tree(FILE *fp, CFTree tr)
+{
+	if (tr->leaf)
+	{
+		fprintf(fp, "(%d", tr->nid);
+		fprintf(fp, "[");
+		for (int i = 0; i < tr->subLen; ++i)
+		{
+			if (i)
+				fprintf(fp, ",");
+			fprintf(fp, "%d", tr->subCluster[i]);
+		}
+		fprintf(fp, "])");
+		return;
+	}
+	fprintf(fp, "(%d", tr->nid);
+	for (int i = 0; i < tr->childLen; ++i)
+	{
+		print_tree(fp, tr->child[i]);
+	}
+	fprintf(fp, ")");
+}
+
+
 int main()
 {
 	CFTree root;
 	root = InitCFTree();
 	int len = 0;
-	Data *ds = (Data*)malloc(sizeof(Data)* 10);
+	Data *ds = (Data*)malloc(sizeof(Data)* 20);
 	read_pos(&ds, &len);
 	print_pos(ds, len);
-	for (int i = 0; i < len; ++ i)
-		InsertCFTree(root, ds, i);
+	FILE *fp = fopen("E://job//basic//birch_tree//tree.txt", "w");
+	for (int i = 0; i < len; ++i)
+	{
+		root = InsertCFTree(root, ds, i);
+		if (i >= 0)
+		{
+			print_tree(fp, root);
+			fprintf(fp, "\n");
+		}
+
+	}
+	fclose(fp);
 	DestroyCFTree(root);
 	free(ds);
 	return 0;

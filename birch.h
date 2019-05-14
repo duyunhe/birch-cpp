@@ -6,9 +6,9 @@
 
 // Cluster Feature Tree
 
-#define B	(2)		// max child-node number in non-leaf
+#define B	(3)		// max child-node number in non-leaf
 #define L	(3)		// max sub-cluster number in leaf
-#define T	(0.1)
+#define T	(0.2)
 
 
 typedef struct CFNode *CFTree;
@@ -20,6 +20,7 @@ struct Data
 
 struct CFNode
 {
+	int nid;
 	int n;				// number of elements in all tree which root is this node   S0
 	double ss;			// S2
 	int subCluster[L];			// sub cluster
